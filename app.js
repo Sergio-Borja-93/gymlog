@@ -341,9 +341,13 @@ function terminar() {
 function descartar() { if (confirm("¿Descartar el entrenamiento en curso?")) { S.activa = null; descansoFin = 0; save(); vEntrenar(); } }
 
 // Temporizador de descanso
-let descansoFin = 0, pausaRest = 0, audio;
+let descansoFin = 0, pausaRest = 0, audio, silbato;
 function descanso(ejId) {
-  try { audio ||= new (window.AudioContext || window.webkitAudioContext)(); audio.resume(); } catch {}
+  // Se activa el audio en el toque del ✓ (iPhone solo permite sonido tras un gesto del usuario)
+  try {
+    audio ||= new (window.AudioContext || window.webkitAudioContext)(); audio.resume();
+    if (!silbato) fetch("silbato.mp3").then(r => r.arrayBuffer()).then(b => audio.decodeAudioData(b)).then(buf => silbato = buf).catch(() => {});
+  } catch {}
   pausaRest = 0; descansoFin = Date.now() + descDe(ejId) * 1000; tick();
 }
 function ajustar(ms) { if (pausaRest) pausaRest = Math.max(1000, pausaRest + ms); else descansoFin += ms; tick(); }
@@ -356,6 +360,10 @@ function saltar() { descansoFin = 0; pausaRest = 0; tick(); }
 function beep() {
   navigator.vibrate?.([300, 150, 300]);
   if (!audio) return;
+  if (silbato) {
+    const src = audio.createBufferSource(); src.buffer = silbato;
+    src.connect(audio.destination); src.start(); return;
+  }
   [0, 0.35, 0.7].forEach(t => {
     const o = audio.createOscillator(), g = audio.createGain();
     o.frequency.value = 880; g.gain.value = 0.25;
