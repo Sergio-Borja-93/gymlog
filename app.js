@@ -103,9 +103,9 @@ let vista = "entrenar";
 function ir(v) {
   vista = v;
   document.querySelectorAll("nav button").forEach(b => b.classList.toggle("on", b.dataset.v === v));
-  $("#ttl").textContent = { entrenar: "Entrenar", rutinas: "Rutinas", ejercicios: "Ejercicios", historial: "Historial", progreso: "Progreso" }[v];
+  $("#ttl").textContent = { entrenar: "Hoy", rutinas: "Rutinas", ajustes: "Ajustes", historial: "Historial", progreso: "Progreso" }[v];
   $("#hact").innerHTML = "";
-  ({ entrenar: vEntrenar, rutinas: vRutinas, ejercicios: vEjercicios, historial: vHistorial, progreso: vProgreso })[v]();
+  ({ entrenar: vEntrenar, rutinas: vRutinas, ajustes: vEjercicios, historial: vHistorial, progreso: vProgreso })[v]();
   window.scrollTo(0, 0);
 }
 
@@ -139,54 +139,124 @@ function elegirEjercicios(cb, multi = true) {
 }
 
 // ---------- ENTRENAR ----------
+// Íconos de línea (SVG)
+const IC = {
+  play: '<path d="M7 4v16l13-8z"/>', check: '<path d="M5 12l5 5L20 7"/>', clock: '<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 3"/>',
+  x: '<path d="M18 6L6 18M6 6l12 12"/>', down: '<path d="M6 9l6 6 6-6"/>', flame: '<path d="M12 12c2-2.96 0-7-1-8 0 3.04-1.77 4.74-3 6-1.23 1.26-2 3.24-2 5a6 6 0 1 0 12 0c0-1.53-1.06-3.94-2-5-1.79 3-2.8 3-4 2z"/>',
+  gear: '<path d="M10.3 4.3a1.7 1.7 0 0 1 3.4 0 1.7 1.7 0 0 0 2.6 1.1 1.7 1.7 0 0 1 2.3 2.3 1.7 1.7 0 0 0 1.1 2.6 1.7 1.7 0 0 1 0 3.4 1.7 1.7 0 0 0-1.1 2.6 1.7 1.7 0 0 1-2.3 2.3 1.7 1.7 0 0 0-2.6 1.1 1.7 1.7 0 0 1-3.4 0 1.7 1.7 0 0 0-2.6-1.1 1.7 1.7 0 0 1-2.3-2.3 1.7 1.7 0 0 0-1.1-2.6 1.7 1.7 0 0 1 0-3.4 1.7 1.7 0 0 0 1.1-2.6 1.7 1.7 0 0 1 2.3-2.3 1.7 1.7 0 0 0 2.6-1.1z"/><circle cx="12" cy="12" r="3"/>'
+};
+const ico = (n, s = "s") => `<svg class="i ${s}" viewBox="0 0 24 24">${IC[n]}</svg>`;
+
+// Colores por grupo muscular [fondo, texto]
+const COLOR = {
+  Pecho: ["#3d1f2b", "#ed93b1"], Espalda: ["#173a2c", "#5dcaa5"], Hombros: ["#3a2a10", "#ef9f27"], Bíceps: ["#2a2550", "#afa9ec"],
+  Tríceps: ["#3d2218", "#f0997b"], Cuádriceps: ["#13304a", "#85b7eb"], Isquiotibiales: ["#25360f", "#97c459"], Gemelos: ["#163636", "#9fe1cb"],
+  Glúteos: ["#3a1530", "#e27fae"], Core: ["#30302c", "#d3d1c7"], Cardio: ["#3d1717", "#f09595"], Otro: ["#2a2a2a", "#b4b2a9"]
+};
+const tag = g => { const [b, c] = COLOR[g] || COLOR.Otro; return `<span class="tag" style="background:${b};color:${c}">${esc(g)}</span>`; };
+const gruposDe = r => [...new Set(r.ejs.map(id => ej(id).grupo).filter(Boolean))];
+
+// Mantener la pantalla encendida durante el entrenamiento
+let wl;
+async function pantalla(on) {
+  try {
+    if (on && !wl && "wakeLock" in navigator) { wl = await navigator.wakeLock.request("screen"); wl.onrelease = () => wl = null; }
+    if (!on && wl) { wl.release(); wl = null; }
+  } catch {}
+}
+document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible" && S?.activa) pantalla(true); });
+
 function vEntrenar() {
   const a = S.activa;
-  if (!a) {
-    const d = new Date().getDay(), deHoy = S.rutinas.filter(r => r.dias?.includes(d));
-    $("#app").innerHTML = `
-      <h2 style="margin-top:4px">Hoy · ${DIAS[d]}</h2>
-      ${deHoy.length ? deHoy.map(r => `
-        <div class="card" style="border:1px solid var(--acc)">
-          <b style="font-size:18px">${esc(r.nombre)}</b><br>
-          <span class="mut">${r.ejs.map(id => esc(ej(id).nombre)).join(" · ")}</span>
-          <button class="btn full" style="margin-top:12px" onclick="empezar('${r.id}')">▶ Empezar</button>
-        </div>`).join("") : `<div class="card mut">Hoy no tenés rutina asignada. ¡Día de descanso! 😴</div>`}
-      <button class="btn sec full" onclick="empezar()">Entrenamiento libre</button>
-      <h2>Otra rutina</h2>
-      ${S.rutinas.length ? S.rutinas.map(r => `
-        <div class="card row sp" onclick="empezar('${r.id}')">
-          <div><b>${esc(r.nombre)}</b><br><span class="mut">${r.ejs.length} ejercicios</span></div><span>▶</span>
-        </div>`).join("") : `<div class="empty">Todavía no creaste rutinas.<br>Andá a la pestaña Rutinas.</div>`}
-      ${ultimaSesionHtml()}`;
-    return;
-  }
-  $("#hact").innerHTML = `<button class="btn sm" onclick="terminar()">Terminar</button>`;
+  if (!a) return vHoy();
+  pantalla(true);
+  const hecho = it => it.sets.length && it.sets.every(s => s.ok);
+  const nHechos = a.items.filter(hecho).length;
+  const cur = a.items.findIndex(it => !hecho(it));
+  window._abiertos ||= new Set();
+  $("#ttl").textContent = "Entrenando"; $("#hact").innerHTML = "";
   $("#app").innerHTML = `
-    <div class="mut" style="margin-bottom:6px">${esc(a.nombre)} · <span id="dur"></span>
-      · ${a.items.filter(it => it.sets.length && it.sets.every(s => s.ok)).length} de ${a.items.length} ejercicios</div>
+    <div class="row sp mut"><span>${esc(a.nombre)}</span><span id="dur"></span></div>
+    <div class="bar" style="margin:8px 0 4px"><div style="width:${a.items.length ? nHechos / a.items.length * 100 : 0}%"></div></div>
+    <div class="mut">${nHechos} de ${a.items.length} ejercicios</div>
     ${a.items.map((it, i) => {
-      const prev = previo(it.ej);
-      return `<div class="card">
-        <div class="row sp"><b>${esc(ej(it.ej).nombre)}</b>
-          <span><button class="chip" style="border:0" onclick="cambiarDesc('${it.ej}')">⏱ ${descDe(it.ej)}s</button><button class="ico" onclick="quitarEj(${i})">✕</button></span></div>
+      if (hecho(it) && !_abiertos.has(i)) return `
+        <div class="card fin row sp" onclick="_abiertos.add(${i});vEntrenar()">
+          <span><span style="color:var(--ok)">${ico("check")}</span> ${esc(ej(it.ej).nombre)} · ${it.sets.length} series</span>${ico("down")}</div>`;
+      const prev = previo(it.ej), sAct = it.sets.findIndex(s => !s.ok);
+      return `<div class="card ${i === cur ? "cur" : ""}">
+        <div class="row sp"><b style="font-size:17px">${esc(ej(it.ej).nombre)}</b>
+          <span class="row" style="gap:2px"><button class="chip" style="border:0" onclick="cambiarDesc('${it.ej}')">${ico("clock")} ${descDe(it.ej)}s</button>
+          <button class="ico" onclick="quitarEj(${i})">${ico("x")}</button></span></div>
         ${prev ? `<div class="mut">Anterior: ${prev}</div>` : ""}
-        <div class="set mut" style="font-size:12px"><span>#</span><span style="text-align:center">kg</span><span style="text-align:center">reps</span><span></span></div>
+        <div class="set mut" style="font-size:12px;margin-bottom:0"><span>#</span><span style="text-align:center">kg</span><span style="text-align:center">reps</span><span></span></div>
         ${it.sets.map((s, j) => `
-          <div class="set ${s.ok ? "done" : ""}">
-            <span class="mut">${j + 1}</span>
-            <input type="number" inputmode="decimal" value="${s.p}" onchange="setV(${i},${j},'p',this.value)">
-            <input type="number" inputmode="numeric" value="${s.r}" onchange="setV(${i},${j},'r',this.value)">
-            <button class="chk" onclick="okSet(${i},${j})">✓</button>
+          <div class="set ${s.ok ? "done" : j === sAct && i === cur ? "cur" : "pend"}">
+            <span class="mut" style="text-align:center">${j + 1}</span>
+            <div class="stp"><button onclick="paso(${i},${j},'p',-2.5)">−</button><input type="number" inputmode="decimal" value="${s.p}" onchange="setV(${i},${j},'p',this.value)"><button onclick="paso(${i},${j},'p',2.5)">+</button></div>
+            <div class="stp"><button onclick="paso(${i},${j},'r',-1)">−</button><input type="number" inputmode="numeric" value="${s.r}" onchange="setV(${i},${j},'r',this.value)"><button onclick="paso(${i},${j},'r',1)">+</button></div>
+            <button class="chk" onclick="okSet(${i},${j})">${ico("check", "")}</button>
           </div>`).join("")}
         <div class="row" style="margin-top:8px">
           <button class="btn sec sm" onclick="addSet(${i})">+ Serie</button>
           ${it.sets.length ? `<button class="btn sec sm" onclick="delSet(${i})">− Serie</button>` : ""}
+          ${hecho(it) ? `<button class="btn sec sm" onclick="_abiertos.delete(${i});vEntrenar()">Plegar</button>` : ""}
         </div>
-      </div>`;
+      </div>${i === cur && a.items[cur + 1] ? `<div class="mut" style="padding:0 4px">Siguiente: ${esc(ej(a.items[cur + 1].ej).nombre)}</div>` : ""}`;
     }).join("")}
-    <button class="btn sec full" onclick="addEjActiva()">+ Agregar ejercicio</button>
-    <button class="btn bad full" style="margin-top:10px" onclick="descartar()">Descartar entrenamiento</button>`;
+    <button class="btn sec full" style="margin-top:10px" onclick="addEjActiva()">+ Agregar ejercicio</button>
+    <button class="btn full" style="margin-top:10px" onclick="terminar()">Terminar entrenamiento</button>
+    <button class="btn sec full" style="margin-top:10px;color:var(--bad)" onclick="descartar()">Descartar</button>
+    <div style="height:70px"></div>`;
   tick();
+}
+
+function vHoy() {
+  const hoy = new Date(), d = hoy.getDay(), deHoy = S.rutinas.filter(r => r.dias?.includes(d));
+  $("#ttl").textContent = "Hoy";
+  pantalla(false); window._abiertos = new Set();
+  $("#hact").innerHTML = `<button class="ico" onclick="ir('ajustes')" aria-label="Ajustes">${ico("gear", "")}</button>`;
+  // Progreso de la semana: días planificados vs. días entrenados desde el lunes
+  const plan = ORDEN_DIAS.filter(x => S.rutinas.some(r => r.dias?.includes(x))).length;
+  const hechos = new Set(S.sesiones.filter(s => new Date(s.fecha) >= lunes(hoy)).map(s => diaKey(s.fecha))).size;
+  const durEst = r => {
+    const ds = S.sesiones.filter(s => s.nombre === r.nombre).slice(0, 5).map(s => s.dur);
+    return ds.length ? Math.round(ds.reduce((a, b) => a + b, 0) / ds.length) : r.ejs.length * 8;
+  };
+  const hace = r => {
+    const s = S.sesiones.find(x => x.nombre === r.nombre); if (!s) return "nunca hecha";
+    const n = Math.round((new Date().setHours(0, 0, 0, 0) - new Date(s.fecha).setHours(0, 0, 0, 0)) / 864e5);
+    return n === 0 ? "hecha hoy" : n === 1 ? "última vez ayer" : `última vez hace ${n} días`;
+  };
+  const titulo = deHoy.length ? `Hoy toca ${deHoy[0].nombre.split(/[ ,]/)[0].toLowerCase()}` : "Hoy es día de descanso";
+  $("#app").innerHTML = `
+    <div class="mut">${hoy.toLocaleDateString("es", { weekday: "long", day: "numeric", month: "long" })}</div>
+    <div class="big">${esc(titulo)}</div>
+    <div class="card row sp">
+      <div><b style="color:var(--acc);font-size:20px">${ico("flame", "")} ${racha()}</b> <span class="mut">días de racha</span></div>
+      ${plan ? `<div style="text-align:right"><div class="mut">Semana: ${Math.min(hechos, plan)} de ${plan}</div>
+        <div class="wk" style="margin-top:5px;justify-content:flex-end">${Array.from({ length: plan }, (_, k) => `<b class="${k < hechos ? "on" : ""}"></b>`).join("")}</div></div>` : ""}
+    </div>
+    ${deHoy.map(r => `
+      <div class="card cur">
+        <b style="font-size:18px">${esc(r.nombre)}</b>
+        <div style="margin:6px 0">${gruposDe(r).map(tag).join("")}</div>
+        <div class="mut">${r.ejs.length} ejercicios · ~${durEst(r)} min · ${hace(r)}</div>
+        <button class="btn full" style="margin-top:12px" onclick="empezar('${r.id}')">${ico("play")} Empezar</button>
+      </div>`).join("") || `<div class="card mut">No tenés rutina para hoy. Descansá o elegí otra abajo.</div>`}
+    <button class="btn sec full" onclick="empezar()">Entrenamiento libre</button>
+    <h2>Otra rutina</h2>
+    ${S.rutinas.filter(r => !deHoy.includes(r)).map(r => `
+      <div class="card row sp" onclick="empezar('${r.id}')">
+        <div><b>${esc(r.nombre)}</b><div>${gruposDe(r).map(tag).join("")}</div></div><span class="mut">${ico("play")}</span>
+      </div>`).join("") || `<div class="mut">No hay otras rutinas.</div>`}
+    ${ultimaSesionHtml()}`;
+}
+
+function paso(i, j, k, d) {
+  const s = S.activa.items[i].sets[j];
+  s[k] = String(Math.max(0, Math.round(((+s[k] || 0) + d) * 100) / 100));
+  save(); vEntrenar();
 }
 
 function ultimaSesionHtml() {
@@ -222,7 +292,10 @@ function empezar(rid) {
 function setV(i, j, k, v) { S.activa.items[i].sets[j][k] = v; save(); }
 function okSet(i, j) {
   const it = S.activa.items[i], s = it.sets[j];
-  s.ok = !s.ok; save(); vEntrenar();
+  s.ok = !s.ok;
+  const sig = it.sets[j + 1];
+  if (s.ok && sig && !sig.ok && sig.p === "" && sig.r === "") { sig.p = s.p; sig.r = s.r; }
+  save(); vEntrenar();
   if (!s.ok) return;
   descanso(it.ej);
   // Récord personal: supera el máximo histórico y el resto de las series de hoy
@@ -257,9 +330,11 @@ function addEjActiva() {
 }
 function terminar() {
   const a = S.activa;
-  a.items = a.items.map(it => ({ ...it, sets: it.sets.filter(s => s.ok) })).filter(it => it.sets.length);
-  if (!a.items.length) { if (confirm("No marcaste ninguna serie. ¿Descartar?")) { S.activa = null; save(); vEntrenar(); } return; }
-  S.sesiones.unshift({ id: a.id, nombre: a.nombre, fecha: new Date(a.inicio).toISOString(), dur: Math.round((Date.now() - a.inicio) / 60000), items: a.items });
+  const items = a.items.map(it => ({ ...it, sets: it.sets.filter(s => s.ok) })).filter(it => it.sets.length);
+  if (!items.length) { if (confirm("No marcaste ninguna serie. ¿Descartar?")) { S.activa = null; save(); vEntrenar(); } return; }
+  const pend = a.items.reduce((n, it) => n + it.sets.filter(s => !s.ok).length, 0);
+  if (!confirm(pend ? `Quedan ${pend} series sin marcar (no se guardan). ¿Terminar igual?` : "¿Terminar y guardar el entrenamiento?")) return;
+  S.sesiones.unshift({ id: a.id, nombre: a.nombre, fecha: new Date(a.inicio).toISOString(), dur: Math.round((Date.now() - a.inicio) / 60000), items });
   S.activa = null; descansoFin = 0; save(); vEntrenar();
   alert("¡Entrenamiento guardado! 💪");
 }

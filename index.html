@@ -63,18 +63,34 @@ h2{font-size:18px;margin:18px 0 6px}
 .item.mov{opacity:.6;background:var(--card2)}
 .up{color:var(--ok)}.down{color:var(--bad)}
 svg text{fill:var(--mut);font-size:10px}
+.i{width:22px;height:22px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round;vertical-align:middle}
+.i.s{width:16px;height:16px;vertical-align:-3px}
+.tag{display:inline-block;border-radius:20px;padding:2px 9px;font-size:12px;margin:2px 2px 0 0}
+.bar{height:6px;background:var(--card2);border-radius:3px;overflow:hidden}
+.bar div{height:100%;background:var(--acc);border-radius:3px}
+.wk{display:flex;gap:4px}.wk b{width:18px;height:6px;border-radius:3px;background:#3a424d}.wk b.on{background:var(--acc)}
+.card.cur{border:1px solid var(--acc)}
+.card.fin{padding:10px 14px;color:var(--mut)}
+.set{grid-template-columns:22px 1fr 1fr 48px}
+.set.cur{background:#2a2410;border-radius:12px;padding:3px 3px 3px 0}
+.set.pend{opacity:.55}
+.stp{display:flex;align-items:center;background:var(--card2);border-radius:12px;height:48px;border:1px solid transparent}
+.set.done .stp{border-color:var(--ok)}
+.stp button{background:none;border:0;color:var(--mut);font-size:22px;width:34px;height:100%;padding:0}
+.stp input{border:0;background:none;padding:0;text-align:center;min-width:0;flex:1;font-size:17px}
+.chk{width:48px;height:48px;border-radius:12px}
+.big{font-size:22px;font-weight:700;margin:2px 0 10px}
 </style>
 </head>
 <body>
-<header><h1 id="ttl">Entrenar</h1><div id="hact"></div></header>
+<header><h1 id="ttl">Hoy</h1><div id="hact"></div></header>
 <main id="app"></main>
 <div id="tmr"></div>
 <nav>
-  <button data-v="entrenar" class="on"><span>🏋️</span>Entrenar</button>
-  <button data-v="rutinas"><span>📋</span>Rutinas</button>
-  <button data-v="ejercicios"><span>💪</span>Ejercicios</button>
-  <button data-v="historial"><span>📅</span>Historial</button>
-  <button data-v="progreso"><span>📈</span>Progreso</button>
+  <button data-v="entrenar" class="on"><svg class="i" viewBox="0 0 24 24"><path d="M5 12H3l9-9 9 9h-2M5 12v7a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-7M9 21v-6h6v6"/></svg>Hoy</button>
+  <button data-v="rutinas"><svg class="i" viewBox="0 0 24 24"><path d="M9 6h11M9 12h11M9 18h11M5 6v.01M5 12v.01M5 18v.01"/></svg>Rutinas</button>
+  <button data-v="historial"><svg class="i" viewBox="0 0 24 24"><rect x="4" y="5" width="16" height="16" rx="2"/><path d="M16 3v4M8 3v4M4 11h16"/></svg>Historial</button>
+  <button data-v="progreso"><svg class="i" viewBox="0 0 24 24"><path d="M4 19h16M4 15l4-6 4 2 4-6 4 4"/></svg>Progreso</button>
 </nav>
 <div id="mod"></div>
 <script src="app.js"></script>
