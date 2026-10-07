@@ -297,7 +297,8 @@ function okSet(i, j) {
   if (s.ok && sig && !sig.ok && sig.p === "" && sig.r === "") { sig.p = s.p; sig.r = s.r; }
   save(); vEntrenar();
   if (!s.ok) return;
-  descanso(it.ej);
+  // Al terminar todas las series del ejercicio: descanso largo de 3 minutos
+  descanso(it.ej, it.sets.every(x => x.ok) ? 180 : null);
   // Récord personal: supera el máximo histórico y el resto de las series de hoy
   const p = +s.p || 0, hist = maxHist(it.ej);
   const hoy = Math.max(0, ...it.sets.filter((x, k) => k !== j && x.ok).map(x => +x.p || 0));
@@ -342,7 +343,7 @@ function descartar() { if (confirm("¿Descartar el entrenamiento en curso?")) { 
 
 // Temporizador de descanso
 let descansoFin = 0, pausaRest = 0, audio, silbato;
-function descanso(ejId) {
+function descanso(ejId, seg) {
   // Se activa el audio en el toque del ✓ (iPhone solo permite sonido tras un gesto del usuario)
   try {
     // "ambient": el silbato suena por encima de la música sin pausarla (Safari 17+)
@@ -350,9 +351,14 @@ function descanso(ejId) {
     audio ||= new (window.AudioContext || window.webkitAudioContext)(); audio.resume();
     if (!silbato) fetch("silbato.mp3").then(r => r.arrayBuffer()).then(b => audio.decodeAudioData(b)).then(buf => silbato = buf).catch(() => {});
   } catch {}
-  pausaRest = 0; descansoFin = Date.now() + descDe(ejId) * 1000; tick();
+  pausaRest = 0; descansoFin = Date.now() + (seg || descDe(ejId)) * 1000; tick();
 }
-function ajustar(ms) { if (pausaRest) pausaRest = Math.max(1000, pausaRest + ms); else descansoFin += ms; tick(); }
+function ajustar(ms) {
+  if (pausaRest) { pausaRest = Math.max(1000, pausaRest + ms); return tick(); }
+  // Restar más de lo que queda termina el descanso en silencio (el sonido es solo para el final natural)
+  if (descansoFin + ms <= Date.now()) return saltar();
+  descansoFin += ms; tick();
+}
 function pausar() {
   if (pausaRest) { descansoFin = Date.now() + pausaRest; pausaRest = 0; }
   else { pausaRest = descansoFin - Date.now(); }
@@ -376,7 +382,11 @@ function beep() {
 function tick() {
   if (S?.activa && $("#dur")) { const m = Math.floor((Date.now() - S.activa.inicio) / 60000); $("#dur").textContent = `${m} min`; }
   const rest = Math.ceil((pausaRest || descansoFin - Date.now()) / 1000);
-  if (descansoFin && rest <= 0 && !pausaRest) { descansoFin = 0; beep(); toast("⏱ ¡Descanso terminado! A la próxima serie"); }
+  if (descansoFin && rest <= 0 && !pausaRest) {
+    // Si terminó hace rato (app en segundo plano), no suena tarde
+    if (Date.now() - descansoFin < 3000) { beep(); toast("⏱ ¡Descanso terminado! A la próxima serie"); }
+    descansoFin = 0;
+  }
   if (descansoFin && rest > 0 && vista === "entrenar") {
     $("#tmr").innerHTML = `<div class="timer"><span>${pausaRest ? "⏸" : "⏱"} ${Math.floor(rest / 60)}:${String(rest % 60).padStart(2, "0")}</span>
       <span><button class="btn sec sm" onclick="ajustar(-15000)">−15</button> <button class="btn sec sm" onclick="ajustar(15000)">+15</button>
