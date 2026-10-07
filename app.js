@@ -142,7 +142,7 @@ function elegirEjercicios(cb, multi = true) {
 // Íconos de línea (SVG)
 const IC = {
   play: '<path d="M7 4v16l13-8z"/>', check: '<path d="M5 12l5 5L20 7"/>', clock: '<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 3"/>',
-  x: '<path d="M18 6L6 18M6 6l12 12"/>', down: '<path d="M6 9l6 6 6-6"/>', flame: '<path d="M12 12c2-2.96 0-7-1-8 0 3.04-1.77 4.74-3 6-1.23 1.26-2 3.24-2 5a6 6 0 1 0 12 0c0-1.53-1.06-3.94-2-5-1.79 3-2.8 3-4 2z"/>',
+  x: '<path d="M18 6L6 18M6 6l12 12"/>', swap: '<path d="M4 8h14l-4-4M20 16H6l4 4"/>', down: '<path d="M6 9l6 6 6-6"/>', flame: '<path d="M12 12c2-2.96 0-7-1-8 0 3.04-1.77 4.74-3 6-1.23 1.26-2 3.24-2 5a6 6 0 1 0 12 0c0-1.53-1.06-3.94-2-5-1.79 3-2.8 3-4 2z"/>',
   gear: '<path d="M10.3 4.3a1.7 1.7 0 0 1 3.4 0 1.7 1.7 0 0 0 2.6 1.1 1.7 1.7 0 0 1 2.3 2.3 1.7 1.7 0 0 0 1.1 2.6 1.7 1.7 0 0 1 0 3.4 1.7 1.7 0 0 0-1.1 2.6 1.7 1.7 0 0 1-2.3 2.3 1.7 1.7 0 0 0-2.6 1.1 1.7 1.7 0 0 1-3.4 0 1.7 1.7 0 0 0-2.6-1.1 1.7 1.7 0 0 1-2.3-2.3 1.7 1.7 0 0 0-1.1-2.6 1.7 1.7 0 0 1 0-3.4 1.7 1.7 0 0 0 1.1-2.6 1.7 1.7 0 0 1 2.3-2.3 1.7 1.7 0 0 0 2.6-1.1z"/><circle cx="12" cy="12" r="3"/>'
 };
 const ico = (n, s = "s") => `<svg class="i ${s}" viewBox="0 0 24 24">${IC[n]}</svg>`;
@@ -187,6 +187,7 @@ function vEntrenar() {
       return `<div class="card ${i === cur ? "cur" : ""}">
         <div class="row sp"><b style="font-size:17px">${esc(ej(it.ej).nombre)}</b>
           <span class="row" style="gap:2px"><button class="chip" style="border:0" onclick="cambiarDesc('${it.ej}')">${ico("clock")} ${descDe(it.ej)}s</button>
+          <button class="ico" onclick="reemplazarEj(${i})" aria-label="Reemplazar">${ico("swap")}</button>
           <button class="ico" onclick="quitarEj(${i})">${ico("x")}</button></span></div>
         ${prev ? `<div class="mut">Anterior: ${prev}</div>` : ""}
         <div class="set mut" style="font-size:12px;margin-bottom:0"><span>#</span><span style="text-align:center">kg</span><span style="text-align:center">reps</span><span></span></div>
@@ -326,6 +327,17 @@ function addSet(i) {
 }
 function delSet(i) { S.activa.items[i].sets.pop(); save(); vEntrenar(); }
 function quitarEj(i) { if (confirm("¿Quitar este ejercicio?")) { S.activa.items.splice(i, 1); save(); vEntrenar(); } }
+function reemplazarEj(i) {
+  const it = S.activa.items[i];
+  elegirEjercicios(([id]) => {
+    if (!id || id === it.ej) return;
+    const hechas = it.sets.filter(s => s.ok);
+    // Las series ya hechas quedan con el ejercicio original; el resto pasa al nuevo
+    if (hechas.length) { it.sets = hechas; S.activa.items.splice(i + 1, 0, { ej: id, sets: setsIniciales(id) }); }
+    else S.activa.items[i] = { ej: id, sets: setsIniciales(id) };
+    save(); vEntrenar(); toast(`Reemplazado por ${ej(id).nombre}`);
+  }, false);
+}
 function addEjActiva() {
   elegirEjercicios(ids => { ids.forEach(id => S.activa.items.push({ ej: id, sets: setsIniciales(id) })); save(); vEntrenar(); });
 }
@@ -335,9 +347,36 @@ function terminar() {
   if (!items.length) { if (confirm("No marcaste ninguna serie. ¿Descartar?")) { S.activa = null; save(); vEntrenar(); } return; }
   const pend = a.items.reduce((n, it) => n + it.sets.filter(s => !s.ok).length, 0);
   if (!confirm(pend ? `Quedan ${pend} series sin marcar (no se guardan). ¿Terminar igual?` : "¿Terminar y guardar el entrenamiento?")) return;
-  S.sesiones.unshift({ id: a.id, nombre: a.nombre, fecha: new Date(a.inicio).toISOString(), dur: Math.round((Date.now() - a.inicio) / 60000), items });
+  // Datos para el resumen (antes de guardar, para comparar contra lo anterior)
+  const prs = items.map(it => [it.ej, Math.max(...it.sets.map(x => +x.p || 0)), maxHist(it.ej)])
+    .filter(([, hoy, ant]) => ant > 0 && hoy > ant);
+  const ant = S.sesiones.find(s => s.nombre === a.nombre);
+  const ses = { id: a.id, nombre: a.nombre, fecha: new Date(a.inicio).toISOString(), dur: Math.round((Date.now() - a.inicio) / 60000), items };
+  S.sesiones.unshift(ses);
   S.activa = null; descansoFin = 0; save(); vEntrenar();
-  alert("¡Entrenamiento guardado! 💪");
+  resumen(ses, prs, ant);
+}
+
+function resumen(s, prs, ant) {
+  const v = volSes(s), nSeries = s.items.reduce((n, i) => n + i.sets.length, 0);
+  let comp = "";
+  if (ant) {
+    const va = volSes(ant), pct = va ? Math.round((v - va) / va * 100) : 0;
+    comp = `<div class="card"><div class="mut">Comparado con la última vez (${fFecha(ant.fecha)})</div>
+      <div class="${pct >= 0 ? "up" : "down"}" style="font-size:18px;font-weight:700">${pct >= 0 ? "▲" : "▼"} ${Math.abs(pct)}% de volumen</div>
+      <div class="mut">${Math.round(va).toLocaleString("es")} kg → ${Math.round(v).toLocaleString("es")} kg · ${ant.dur} min → ${s.dur} min</div></div>`;
+  }
+  modal(`<div style="text-align:center"><div style="font-size:44px">💪</div>
+      <h2 style="margin:4px 0">¡Entrenamiento terminado!</h2><div class="mut">${esc(s.nombre)}</div></div>
+    <div class="stat" style="margin-top:14px">
+      <div><b>${s.dur}</b><span class="mut">Minutos</span></div>
+      <div><b>${nSeries}</b><span class="mut">Series</span></div>
+      <div><b>${(v / 1000).toFixed(1)}t</b><span class="mut">Volumen</span></div>
+    </div>
+    ${prs.length ? `<h2>🏆 Récords nuevos</h2><div class="card list">${prs.map(([id, hoy, a]) =>
+      `<div class="item"><span>${esc(ej(id).nombre)}</span><span><span class="mut">${a} →</span> <b style="color:var(--ok)">${hoy} kg</b></span></div>`).join("")}</div>` : ""}
+    ${comp}
+    <button class="btn full" style="margin-top:12px" onclick="cerrar()">Listo</button>`);
 }
 function descartar() { if (confirm("¿Descartar el entrenamiento en curso?")) { S.activa = null; descansoFin = 0; save(); vEntrenar(); } }
 
@@ -516,8 +555,38 @@ function verSesion(id) {
     <div class="mut">${new Date(s.fecha).toLocaleString("es")} · ${s.dur} min</div>
     ${s.items.map(it => `<div class="card"><b>${esc(ej(it.ej).nombre)}</b><br>
       <span class="mut">${it.sets.map(x => `${x.p} kg × ${x.r}`).join("<br>")}</span></div>`).join("")}
-    <button class="btn bad full" onclick="_delS()">Eliminar entrenamiento</button>`);
+    <button class="btn sec full" onclick="editSesion('${id}')">Editar</button>
+    <button class="btn bad full" style="margin-top:10px" onclick="_delS()">Eliminar entrenamiento</button>`);
   window._delS = () => { if (confirm("¿Eliminar este entrenamiento?")) { S.sesiones = S.sesiones.filter(x => x.id !== id); save(); cerrar(); ir(vista); } };
+}
+
+// Editar un entrenamiento guardado (sobre una copia; se aplica al tocar Guardar)
+function editSesion(id) {
+  const orig = S.sesiones.find(x => x.id === id), s = structuredClone(orig);
+  const pintar = () => modal(`<h2 style="margin-top:0">Editar entrenamiento</h2>
+    <div class="mut">${esc(s.nombre)} · ${fFecha(s.fecha)}</div>
+    <label>Duración (min)</label><input type="number" inputmode="numeric" value="${s.dur}" onchange="_es.dur=+this.value||0">
+    ${s.items.map((it, i) => `<div class="card">
+      <div class="row sp"><b>${esc(ej(it.ej).nombre)}</b><button class="ico" onclick="_esDelEj(${i})">${ico("x")}</button></div>
+      <div class="set mut" style="font-size:12px;grid-template-columns:22px 1fr 1fr 40px"><span>#</span><span style="text-align:center">kg</span><span style="text-align:center">reps</span><span></span></div>
+      ${it.sets.map((x, j) => `<div class="set" style="grid-template-columns:22px 1fr 1fr 40px">
+        <span class="mut">${j + 1}</span>
+        <input type="number" inputmode="decimal" value="${x.p}" onchange="_es.items[${i}].sets[${j}].p=this.value">
+        <input type="number" inputmode="numeric" value="${x.r}" onchange="_es.items[${i}].sets[${j}].r=this.value">
+        <button class="ico" onclick="_esDelSet(${i},${j})">${ico("x")}</button></div>`).join("")}
+      <button class="btn sec sm" style="margin-top:6px" onclick="_esAddSet(${i})">+ Serie</button>
+    </div>`).join("")}
+    <button class="btn full" onclick="_esSave()">Guardar cambios</button>
+    <button class="btn sec full" style="margin-top:10px" onclick="verSesion('${id}')">Cancelar</button>`);
+  window._es = s;
+  window._esDelSet = (i, j) => { s.items[i].sets.splice(j, 1); if (!s.items[i].sets.length) s.items.splice(i, 1); pintar(); };
+  window._esDelEj = i => { if (confirm("¿Quitar este ejercicio del entrenamiento?")) { s.items.splice(i, 1); pintar(); } };
+  window._esAddSet = i => { const u = s.items[i].sets.at(-1); s.items[i].sets.push({ p: u?.p ?? "", r: u?.r ?? "", ok: true }); pintar(); };
+  window._esSave = () => {
+    if (!s.items.length) return alert("El entrenamiento quedó vacío. Si querés borrarlo, usá Eliminar.");
+    Object.assign(orig, s); save(); toast("Cambios guardados"); verSesion(id); ir(vista);
+  };
+  pintar();
 }
 
 // ---------- PROGRESO ----------
