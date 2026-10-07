@@ -1,0 +1,82 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="GymLog">
+<meta name="theme-color" content="#111418">
+<link rel="manifest" href="manifest.json">
+<link rel="apple-touch-icon" href="icon.png">
+<title>GymLog</title>
+<style>
+:root{--bg:#111418;--card:#1b2027;--card2:#242b34;--txt:#eef1f4;--mut:#8a94a3;--acc:#f4b44c;--ok:#4cc38a;--bad:#e5534b;--r:14px}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{margin:0;background:var(--bg);color:var(--txt);font:16px/1.4 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif}
+header{position:sticky;top:0;z-index:5;background:var(--bg);padding:calc(env(safe-area-inset-top) + 12px) 16px 10px;display:flex;align-items:center;justify-content:space-between}
+header h1{font-size:24px;margin:0}
+main{padding:0 16px calc(90px + env(safe-area-inset-bottom))}
+nav{position:fixed;bottom:0;left:0;right:0;display:flex;background:#0c0f12ee;backdrop-filter:blur(10px);border-top:1px solid #222;padding-bottom:env(safe-area-inset-bottom)}
+nav button{flex:1;background:none;border:0;color:var(--mut);padding:9px 0 7px;font-size:11px;display:flex;flex-direction:column;align-items:center;gap:2px}
+nav button span{font-size:21px;line-height:1}
+nav button.on{color:var(--acc)}
+.card{background:var(--card);border-radius:var(--r);padding:14px;margin:10px 0}
+.row{display:flex;align-items:center;gap:8px}
+.sp{justify-content:space-between}
+.mut{color:var(--mut);font-size:14px}
+.btn{background:var(--acc);color:#1a1300;border:0;border-radius:12px;padding:12px 16px;font-weight:600;font-size:16px}
+.btn.sec{background:var(--card2);color:var(--txt)}
+.btn.bad{background:var(--bad);color:#fff}
+.btn.full{width:100%}
+.btn.sm{padding:7px 11px;font-size:14px;border-radius:10px}
+.ico{background:none;border:0;color:var(--mut);font-size:20px;padding:4px 8px}
+input,select{width:100%;background:var(--card2);color:var(--txt);border:1px solid #333b46;border-radius:10px;padding:11px;font-size:16px}
+label{display:block;margin:10px 0 4px;font-size:14px;color:var(--mut)}
+h2{font-size:18px;margin:18px 0 6px}
+.chip{display:inline-block;background:var(--card2);border-radius:20px;padding:3px 10px;font-size:12px;color:var(--mut)}
+.set{display:grid;grid-template-columns:28px 1fr 1fr 40px;gap:8px;align-items:center;margin:6px 0}
+.set input{padding:9px;text-align:center}
+.set.done input{border-color:var(--ok)}
+.chk{width:40px;height:40px;border-radius:10px;border:0;background:var(--card2);color:var(--mut);font-size:18px}
+.set.done .chk{background:var(--ok);color:#fff}
+.list .item{display:flex;justify-content:space-between;align-items:center;padding:12px 0;border-bottom:1px solid #262d36}
+.list .item:last-child{border:0}
+.empty{text-align:center;color:var(--mut);padding:40px 10px}
+.modal{position:fixed;inset:0;background:#000a;z-index:20;display:flex;align-items:flex-end}
+.sheet{background:var(--bg);width:100%;max-height:88vh;overflow:auto;border-radius:18px 18px 0 0;padding:16px 16px calc(20px + env(safe-area-inset-bottom))}
+.stat{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+.stat div{background:var(--card2);border-radius:12px;padding:10px;text-align:center}
+.stat b{display:block;font-size:20px;color:var(--acc)}
+.timer{position:fixed;left:16px;right:16px;bottom:calc(70px + env(safe-area-inset-bottom));background:var(--acc);color:#1a1300;border-radius:14px;padding:10px 14px;font-weight:700;display:flex;justify-content:space-between;align-items:center;z-index:6}
+.toast{position:fixed;left:16px;right:16px;top:calc(env(safe-area-inset-top) + 14px);background:var(--ok);color:#fff;border-radius:14px;padding:14px;font-weight:700;text-align:center;z-index:30;animation:tin .3s}
+@keyframes tin{from{transform:translateY(-30px);opacity:0}}
+.cal{display:grid;grid-template-columns:repeat(7,1fr);gap:4px;text-align:center;font-size:13px}
+.cal span{padding:6px 0;border-radius:8px}
+.cal .on{background:var(--acc);color:#1a1300;font-weight:700}
+.cal .hoy{outline:1px solid var(--acc)}
+.seg{display:flex;background:var(--card2);border-radius:10px;padding:3px;margin:8px 0}
+.seg button{flex:1;background:none;border:0;color:var(--mut);padding:7px 0;border-radius:8px;font-size:13px}
+.seg button.on{background:var(--acc);color:#1a1300;font-weight:600}
+.drag{touch-action:none;cursor:grab;font-size:20px;color:var(--mut);padding:4px 10px 4px 0}
+.item.mov{opacity:.6;background:var(--card2)}
+.up{color:var(--ok)}.down{color:var(--bad)}
+svg text{fill:var(--mut);font-size:10px}
+</style>
+</head>
+<body>
+<header><h1 id="ttl">Entrenar</h1><div id="hact"></div></header>
+<main id="app"></main>
+<div id="tmr"></div>
+<nav>
+  <button data-v="entrenar" class="on"><span>🏋️</span>Entrenar</button>
+  <button data-v="rutinas"><span>📋</span>Rutinas</button>
+  <button data-v="ejercicios"><span>💪</span>Ejercicios</button>
+  <button data-v="historial"><span>📅</span>Historial</button>
+  <button data-v="progreso"><span>📈</span>Progreso</button>
+</nav>
+<div id="mod"></div>
+<script src="app.js"></script>
+</body>
+</html>
