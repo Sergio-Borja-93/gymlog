@@ -345,6 +345,8 @@ let descansoFin = 0, pausaRest = 0, audio, silbato;
 function descanso(ejId) {
   // Se activa el audio en el toque del ✓ (iPhone solo permite sonido tras un gesto del usuario)
   try {
+    // "ambient": el silbato suena por encima de la música sin pausarla (Safari 17+)
+    if (navigator.audioSession) navigator.audioSession.type = "ambient";
     audio ||= new (window.AudioContext || window.webkitAudioContext)(); audio.resume();
     if (!silbato) fetch("silbato.mp3").then(r => r.arrayBuffer()).then(b => audio.decodeAudioData(b)).then(buf => silbato = buf).catch(() => {});
   } catch {}
