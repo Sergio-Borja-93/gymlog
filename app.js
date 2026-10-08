@@ -99,8 +99,9 @@ async function init() {
   setInterval(tick, 1000);
 }
 
-let vista = "entrenar";
-function ir(v) {
+let vista = "entrenar", pila = [];
+function ir(v, volviendo) {
+  if (!volviendo && v !== vista) { pila.push(vista); if (pila.length > 20) pila.shift(); }
   vista = v;
   document.querySelectorAll("nav button").forEach(b => b.classList.toggle("on", b.dataset.v === v));
   $("#ttl").textContent = { entrenar: "Hoy", rutinas: "Rutinas", ajustes: "Ajustes", historial: "Historial", progreso: "Progreso" }[v];
@@ -109,7 +110,33 @@ function ir(v) {
   window.scrollTo(0, 0);
 }
 
+// ---------- Gesto "atrás": deslizar desde el borde izquierdo ----------
+function atras() {
+  if ($("#mod").innerHTML) { const f = window._modalAtras; f ? f() : cerrar(); return; }
+  if (pila.length) ir(pila.pop(), true);
+}
+const puedeAtras = () => !!$("#mod").innerHTML || pila.length > 0;
+let gx = null, gy = 0, gdx = 0, gel = null;
+document.addEventListener("touchstart", e => {
+  const t = e.touches[0];
+  if (t.clientX > 28 || !puedeAtras()) return;
+  gx = t.clientX; gy = t.clientY; gdx = 0;
+  gel = $("#mod .sheet") || $("#app");
+}, { passive: true });
+document.addEventListener("touchmove", e => {
+  if (gx === null) return;
+  const t = e.touches[0]; gdx = t.clientX - gx;
+  if (Math.abs(t.clientY - gy) > Math.abs(gdx) && gdx < 20) { gel.style.transform = ""; gx = null; return; }
+  if (gdx > 0) { gel.style.transition = "none"; gel.style.transform = `translateX(${gdx * 0.7}px)`; }
+}, { passive: true });
+document.addEventListener("touchend", () => {
+  if (gx === null) return;
+  gx = null; gel.style.transition = "transform .2s"; gel.style.transform = "";
+  if (gdx > 80) atras();
+});
+
 function modal(html) {
+  window._modalAtras = null;
   $("#mod").innerHTML = `<div class="modal" onclick="if(event.target===this)cerrar()"><div class="sheet">${html}</div></div>`;
 }
 function cerrar() { $("#mod").innerHTML = ""; }
@@ -493,7 +520,7 @@ function editRutina(id) {
   };
   window._dia = d => { r.dias = r.dias.includes(d) ? r.dias.filter(x => x !== d) : [...r.dias, d]; pintar(); };
   window._rm = i => { r.ejs.splice(i, 1); pintar(); };
-  window._add = () => elegirEjercicios(ids => { r.ejs.push(...ids); pintar(); });
+  window._add = () => { elegirEjercicios(ids => { r.ejs.push(...ids); pintar(); }); window._modalAtras = pintar; };
   window._saveR = () => {
     if (!r.nombre.trim()) return alert("Poné un nombre a la rutina");
     const k = S.rutinas.findIndex(x => x.id === r.id);
@@ -563,7 +590,7 @@ function verSesion(id) {
 // Editar un entrenamiento guardado (sobre una copia; se aplica al tocar Guardar)
 function editSesion(id) {
   const orig = S.sesiones.find(x => x.id === id), s = structuredClone(orig);
-  const pintar = () => modal(`<h2 style="margin-top:0">Editar entrenamiento</h2>
+  let pintar = () => modal(`<h2 style="margin-top:0">Editar entrenamiento</h2>
     <div class="mut">${esc(s.nombre)} · ${fFecha(s.fecha)}</div>
     <label>Duración (min)</label><input type="number" inputmode="numeric" value="${s.dur}" onchange="_es.dur=+this.value||0">
     ${s.items.map((it, i) => `<div class="card">
@@ -578,6 +605,9 @@ function editSesion(id) {
     </div>`).join("")}
     <button class="btn full" onclick="_esSave()">Guardar cambios</button>
     <button class="btn sec full" style="margin-top:10px" onclick="verSesion('${id}')">Cancelar</button>`);
+  const pintar0 = pintar;
+  // Atrás desde la edición vuelve al detalle del entrenamiento
+  pintar = () => { pintar0(); window._modalAtras = () => verSesion(id); };
   window._es = s;
   window._esDelSet = (i, j) => { s.items[i].sets.splice(j, 1); if (!s.items[i].sets.length) s.items.splice(i, 1); pintar(); };
   window._esDelEj = i => { if (confirm("¿Quitar este ejercicio del entrenamiento?")) { s.items.splice(i, 1); pintar(); } };
@@ -640,7 +670,119 @@ function vProgreso() {
     <h2>🏆 Récords personales</h2>
     <div class="card list">${prs.map(([id, m]) => `<div class="item"><span>${esc(ej(id).nombre)}</span><b>${m} kg</b></div>`).join("")}</div>`
     : `<div class="empty">Registrá entrenamientos para ver tu progreso.</div>`}`;
-  if (usados.length) grafico(_pej);
+  if (usados.length) { grafico(_pej); $("#app").insertAdjacentHTML("beforeend", progComparar() + progGrupos() + progRutina()); }
+}
+
+// ---------- Comparación de períodos ----------
+// Rango [desde, hasta) del período actual (k=0) o anterior (k=1)
+// El período anterior se corta en el mismo punto (ej: 1 al 7 de sept vs 1 al 7 de oct) para que sea justo
+function periodo(k) {
+  const hoy = new Date();
+  const ini = m => window._cmp === "mes" ? new Date(hoy.getFullYear(), hoy.getMonth() - m, 1) : new Date(lunes(hoy) - m * 7 * 864e5);
+  if (!k) return [ini(0), new Date(Date.now() + 1)];
+  const a = ini(1), fin = window._cmp === "mes"
+    ? new Date(Math.min(ini(0), new Date(a.getFullYear(), a.getMonth(), hoy.getDate() + 1)))
+    : new Date(+a + (Date.now() - ini(0)));
+  return [a, fin];
+}
+const enPer = (s, [a, b]) => { const f = new Date(s.fecha); return f >= a && f < b; };
+// Fechas en que se rompió un récord (recorriendo del más viejo al más nuevo)
+function fechasPR() {
+  const max = {}, out = [];
+  S.sesiones.slice().reverse().forEach(s => s.items.forEach(it => {
+    const m = Math.max(0, ...it.sets.map(x => +x.p || 0));
+    if (max[it.ej] > 0 && m > max[it.ej]) out.push(s.fecha);
+    max[it.ej] = Math.max(max[it.ej] || 0, m);
+  }));
+  return out;
+}
+function progComparar() {
+  window._cmp ||= "sem";
+  const prs = fechasPR();
+  const met = per => {
+    const ss = S.sesiones.filter(s => enPer(s, per));
+    return {
+      n: ss.length, vol: ss.reduce((a, s) => a + volSes(s), 0) / 1000,
+      dur: ss.length ? Math.round(ss.reduce((a, s) => a + s.dur, 0) / ss.length) : 0,
+      pr: prs.filter(f => enPer({ fecha: f }, per)).length
+    };
+  };
+  const [p0, p1] = [periodo(0), periodo(1)], a = met(p0), b = met(p1);
+  const nom = (p, k) => window._cmp === "mes" ? p[0].toLocaleDateString("es", { month: "short" }) : (k ? "Anterior" : "Actual");
+  const cambio = (x, y, pct, inv) => {
+    if (x === y) return `<span class="mut">=</span>`;
+    const up = x > y, txt = pct && y ? `${Math.abs(Math.round((x - y) / y * 100))}%` : `${Math.abs(Math.round((x - y) * 10) / 10)}`;
+    return `<span class="${up !== !!inv ? "up" : "down"}">${up ? "▲" : "▼"} ${txt}</span>`;
+  };
+  const fila = (t, x, y, f, pct, inv) => `<tr><td>${t}</td><td>${f(y)}</td><td>${f(x)}</td><td>${cambio(x, y, pct, inv)}</td></tr>`;
+  return `<h2>Comparar</h2>
+    <div class="seg">${[["sem", "Semana vs semana"], ["mes", "Mes vs mes"]].map(([k, t]) =>
+      `<button class="${_cmp === k ? "on" : ""}" onclick="_cmp='${k}';vProgreso()">${t}</button>`).join("")}</div>
+    <div class="card"><table class="tb">
+      <tr class="mut"><td></td><td>${nom(p1, 1)}</td><td>${nom(p0, 0)}</td><td>Cambio</td></tr>
+      ${fila("Entrenamientos", a.n, b.n, v => v)}
+      ${fila("Volumen", a.vol, b.vol, v => v.toFixed(1) + " t", true)}
+      ${fila("Duración prom.", a.dur, b.dur, v => v + " min", false, true)}
+      ${fila("Récords nuevos", a.pr, b.pr, v => v)}
+    </table><div class="mut" style="font-size:12px;margin-top:6px">Se compara hasta el mismo día del ${window._cmp === "mes" ? "mes" : "la semana"} anterior.</div></div>`;
+}
+
+// ---------- Volumen por grupo muscular ----------
+function progGrupos() {
+  const [p0, p1] = [periodo(0), periodo(1)];
+  const volPer = per => {
+    const m = {};
+    S.sesiones.filter(s => enPer(s, per)).forEach(s => s.items.forEach(it => { const g = ej(it.ej).grupo || "Otro"; m[g] = (m[g] || 0) + vol(it); }));
+    return m;
+  };
+  const a = volPer(p0), b = volPer(p1), gs = GRUPOS.filter(g => a[g] || b[g]);
+  if (!gs.length) return `<h2>Volumen por grupo</h2><div class="card mut">Sin entrenamientos en este período.</div>`;
+  const mx = Math.max(...gs.map(g => Math.max(a[g] || 0, b[g] || 0)));
+  return `<h2>Volumen por grupo <span class="mut" style="font-size:13px;font-weight:400">(${window._cmp === "mes" ? "este mes" : "esta semana"})</span></h2>
+    <div class="card">${gs.sort((x, y) => (a[y] || 0) - (a[x] || 0)).map(g => {
+      const [, c] = COLOR[g] || COLOR.Otro, va = a[g] || 0, vb = b[g] || 0;
+      const d = vb ? Math.round((va - vb) / vb * 100) : null;
+      return `<div style="margin:8px 0">
+        <div class="row sp" style="font-size:14px"><span>${esc(g)}</span>
+          <span>${(va / 1000).toFixed(1)} t ${d === null ? "" : `<span class="${d >= 0 ? "up" : "down"}" style="font-size:12px">${d >= 0 ? "▲" : "▼"}${Math.abs(d)}%</span>`}</span></div>
+        <div class="bar" style="height:8px;margin-top:3px;position:relative"><div style="width:${va / mx * 100}%;background:${c}"></div></div>
+        <div class="bar" style="height:3px;margin-top:2px;background:none"><div style="width:${vb / mx * 100}%;background:#4b5563"></div></div>
+      </div>`;
+    }).join("")}
+    <div class="mut" style="font-size:12px">Barra fina gris: período anterior.</div></div>`;
+}
+
+// ---------- Progreso por rutina ----------
+function progRutina() {
+  const nombres = [...new Set(S.sesiones.map(s => s.nombre))];
+  if (!nombres.length) return "";
+  window._prut = nombres.includes(window._prut) ? window._prut : nombres[0];
+  const ss = S.sesiones.filter(s => s.nombre === _prut).reverse(); // de la más vieja a la más nueva
+  const pts = ss.slice(-12).map(s => ({ f: s.fecha, v: volSes(s) }));
+  const W = 320, H = 130, P = 24, mx = Math.max(...pts.map(p => p.v), 1);
+  const x = i => P + (pts.length === 1 ? (W - 2 * P) / 2 : i * (W - 2 * P) / (pts.length - 1));
+  const y = v => H - P - v / mx * (H - 2 * P);
+  const maxEn = (s, id) => { const it = s.items.find(i => i.ej === id); return it ? Math.max(...it.sets.map(z => +z.p || 0)) : null; };
+  const ejs = [...new Set(ss.flatMap(s => s.items.map(i => i.ej)))];
+  const filas = ejs.map(id => {
+    const con = ss.filter(s => maxEn(s, id) !== null);
+    const p = maxEn(con[0], id), u = maxEn(con.at(-1), id), d = p ? Math.round((u - p) / p * 100) : 0;
+    return `<tr><td>${esc(ej(id).nombre)}</td><td>${p}</td><td>${u}</td>
+      <td>${con.length < 2 ? `<span class="mut">—</span>` : d === 0 ? `<span class="mut">=</span>` : `<span class="${d > 0 ? "up" : "down"}">${d > 0 ? "▲" : "▼"} ${Math.abs(d)}%</span>`}</td></tr>`;
+  }).join("");
+  return `<h2>Progreso por rutina</h2>
+    <select onchange="_prut=this.value;vProgreso()">${nombres.map(n => `<option ${n === _prut ? "selected" : ""}>${esc(n)}</option>`).join("")}</select>
+    <div class="card">
+      <div class="mut">Volumen de cada vez que la hiciste (${ss.length} en total)</div>
+      <svg viewBox="0 0 ${W} ${H}" width="100%">
+        <polyline fill="none" stroke="#f4b44c" stroke-width="2.5" points="${pts.map((p, i) => `${x(i)},${y(p.v)}`).join(" ")}"/>
+        ${pts.map((p, i) => `<circle cx="${x(i)}" cy="${y(p.v)}" r="4" fill="#f4b44c"/>
+          <text x="${x(i)}" y="${y(p.v) - 8}" text-anchor="middle">${(p.v / 1000).toFixed(1)}t</text>
+          <text x="${x(i)}" y="${H - 6}" text-anchor="middle">${new Date(p.f).getDate()}/${new Date(p.f).getMonth() + 1}</text>`).join("")}
+      </svg>
+      <div class="mut" style="margin-top:8px">Peso máximo: primera vez → última vez</div>
+      <table class="tb"><tr class="mut"><td>Ejercicio</td><td>1ª</td><td>Últ.</td><td></td></tr>${filas}</table>
+    </div>`;
 }
 function grafico(ejId) {
   const desde = { sem: 56, mes: 30, "3m": 91, todo: 1e5 }[_rng];

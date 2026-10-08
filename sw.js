@@ -1,5 +1,5 @@
 ﻿// Cache para funcionar sin internet. Subí la versión al publicar cambios.
-const V = "gymlog-v8";
+const V = "gymlog-v10";
 const FILES = ["./", "index.html", "app.js", "manifest.json", "icon.png", "silbato.mp3"];
 
 self.addEventListener("install", e => e.waitUntil(caches.open(V).then(c => c.addAll(FILES)).then(() => self.skipWaiting())));
