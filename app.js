@@ -670,7 +670,7 @@ function vProgreso() {
     <h2>🏆 Récords personales</h2>
     <div class="card list">${prs.map(([id, m]) => `<div class="item"><span>${esc(ej(id).nombre)}</span><b>${m} kg</b></div>`).join("")}</div>`
     : `<div class="empty">Registrá entrenamientos para ver tu progreso.</div>`}`;
-  if (usados.length) { grafico(_pej); $("#app").insertAdjacentHTML("beforeend", progComparar() + progGrupos() + progRutina()); }
+  if (usados.length) { grafico(_pej); $("#app").insertAdjacentHTML("beforeend", progComparar() + progSeries() + progGrupos() + progRutina()); }
 }
 
 // ---------- Comparación de períodos ----------
@@ -725,6 +725,32 @@ function progComparar() {
       ${fila("Duración prom.", a.dur, b.dur, v => v + " min", false, true)}
       ${fila("Récords nuevos", a.pr, b.pr, v => v)}
     </table><div class="mut" style="font-size:12px;margin-top:6px">Se compara hasta el mismo día del ${window._cmp === "mes" ? "mes" : "la semana"} anterior.</div></div>`;
+}
+
+// ---------- Series por grupo muscular y por ejercicio ----------
+function progSeries() {
+  const cuenta = per => {
+    const e = {}, g = {};
+    S.sesiones.filter(s => enPer(s, per)).forEach(s => s.items.forEach(it => {
+      const n = it.sets.length, gr = ej(it.ej).grupo || "Otro";
+      e[it.ej] = (e[it.ej] || 0) + n; g[gr] = (g[gr] || 0) + n;
+    }));
+    return { e, g };
+  };
+  const a = cuenta(periodo(0)), b = cuenta(periodo(1));
+  const dif = (x, y) => x === y ? `<span class="mut">=</span>` : `<span class="${x > y ? "up" : "down"}">${x > y ? "▲" : "▼"} ${Math.abs(x - y)}</span>`;
+  const gs = GRUPOS.filter(g => a.g[g] || b.g[g]).sort((x, y) => (a.g[y] || 0) - (a.g[x] || 0));
+  const es = [...new Set([...Object.keys(a.e), ...Object.keys(b.e)])].sort((x, y) => (a.e[y] || 0) - (a.e[x] || 0));
+  const per = window._cmp === "mes" ? "este mes" : "esta semana";
+  if (!gs.length) return `<h2>Series</h2><div class="card mut">Sin series en este período.</div>`;
+  return `<h2>Series por grupo <span class="mut" style="font-size:13px;font-weight:400">(${per})</span></h2>
+    <div class="card"><table class="tb"><tr class="mut"><td>Grupo</td><td>Actual</td><td>Anterior</td><td>Cambio</td></tr>
+      ${gs.map(g => `<tr><td>${tag(g)}</td><td><b>${a.g[g] || 0}</b></td><td>${b.g[g] || 0}</td><td>${dif(a.g[g] || 0, b.g[g] || 0)}</td></tr>`).join("")}
+    </table>${window._cmp !== "mes" ? `<div class="mut" style="font-size:12px;margin-top:6px">Referencia habitual: 10 a 20 series por músculo por semana.</div>` : ""}</div>
+    <h2>Series por ejercicio <span class="mut" style="font-size:13px;font-weight:400">(${per})</span></h2>
+    <div class="card"><table class="tb"><tr class="mut"><td>Ejercicio</td><td>Actual</td><td>Anterior</td><td>Cambio</td></tr>
+      ${es.map(id => `<tr><td>${esc(ej(id).nombre)}</td><td><b>${a.e[id] || 0}</b></td><td>${b.e[id] || 0}</td><td>${dif(a.e[id] || 0, b.e[id] || 0)}</td></tr>`).join("")}
+    </table><div class="mut" style="font-size:12px;margin-top:6px">El período anterior se cuenta hasta el mismo día.</div></div>`;
 }
 
 // ---------- Volumen por grupo muscular ----------
