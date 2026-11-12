@@ -260,6 +260,7 @@ function vHoy() {
   $("#app").innerHTML = `
     <div class="mut">${hoy.toLocaleDateString("es", { weekday: "long", day: "numeric", month: "long" })}</div>
     <div class="big">${esc(titulo)}</div>
+    ${avisoCopia()}
     <div class="card row sp">
       <div><b style="color:var(--acc);font-size:20px">${ico("flame", "")} ${racha()}</b> <span class="mut">días de racha</span></div>
       ${plan ? `<div style="text-align:right"><div class="mut">Semana: ${Math.min(hechos, plan)} de ${plan}</div>
@@ -542,6 +543,7 @@ function vEjercicios() {
       <p class="mut" style="margin-top:0">Hacé una copia de seguridad cada tanto. Si se borra Safari o cambiás de iPhone, la restaurás con "Importar".</p>
       <label>Descanso entre series (segundos)</label>
       <input type="number" inputmode="numeric" value="${S.descanso || 90}" onchange="S.descanso=+this.value||90;save()">
+      <div class="mut" style="margin-top:12px">Última copia: ${S.ultimoBackup ? new Date(S.ultimoBackup).toLocaleDateString("es", { day: "numeric", month: "long" }) + ` (hace ${diasSinCopia()} días)` : "nunca"}</div>
       <div class="row" style="margin-top:12px"><button class="btn sec" style="flex:1" onclick="exportar()">⬇ Exportar</button>
       <button class="btn sec" style="flex:1" onclick="$('#imp').click()">⬆ Importar</button></div>
       <input type="file" id="imp" accept=".json,application/json" style="display:none" onchange="importar(this.files[0])">
@@ -843,12 +845,27 @@ function grafico(ejId) {
 }
 
 // ---------- BACKUP ----------
-function exportar() {
-  const blob = new Blob([JSON.stringify(S)], { type: "application/json" });
+// Nombre fijo: al guardarlo en la misma carpeta de Archivos, iOS ofrece "Reemplazar"
+const ARCH_COPIA = "gymlog_copia.json";
+async function exportar() {
+  const datos = JSON.stringify(S);
+  const listo = () => { S.ultimoBackup = Date.now(); save(); toast("Copia guardada ✅"); ir(vista, true); };
+  try {
+    const f = new File([datos], ARCH_COPIA, { type: "application/json" });
+    if (navigator.canShare?.({ files: [f] })) { await navigator.share({ files: [f] }); return listo(); }
+  } catch (e) { if (e?.name === "AbortError") return; } // el usuario cerró la ventana sin guardar
   const a = document.createElement("a");
-  a.href = URL.createObjectURL(blob);
-  a.download = `gymlog_${new Date().toISOString().slice(0, 10)}.json`;
-  a.click();
+  a.href = URL.createObjectURL(new Blob([datos], { type: "application/json" }));
+  a.download = ARCH_COPIA; a.click(); listo();
+}
+const diasSinCopia = () => S.ultimoBackup ? Math.floor((Date.now() - S.ultimoBackup) / 864e5) : null;
+function avisoCopia() {
+  const d = diasSinCopia();
+  if (!S.sesiones.length || (d !== null && d < 7)) return "";
+  return `<div class="card" style="border:1px solid var(--acc)">
+    <b>💾 ${d === null ? "Todavía no hiciste ninguna copia" : `Hace ${d} días que no hacés una copia`}</b>
+    <div class="mut" style="margin:4px 0 10px">Tus entrenamientos solo están en este iPhone. Guardá la copia en Archivos → iCloud Drive y elegí "Reemplazar".</div>
+    <button class="btn full" onclick="exportar()">Guardar copia ahora</button></div>`;
 }
 function importar(f) {
   if (!f) return;
